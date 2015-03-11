@@ -25,6 +25,7 @@ class Archetypes():
     self.archetypesIdx.extend( np.argmin(XS, axis=0) )
 
     self.archetypesList = [ (idx, self.archetypesIdx.count(idx)) for idx in set(self.archetypesIdx) ]
+    self.archetypesList = sorted(self.archetypesList, key=lambda archetype: archetype[1], reverse=True)
 
     return self.archetypesList
 
@@ -38,11 +39,10 @@ class Archetypes():
 
   def screePlot(self):
 
-    l = [ self.archetypesIdx.count(idx) for idx in set(self.archetypesIdx) ]
-    l.sort(reverse=True)
+    ll = [ archetype[1] for archetype in self.archetypesList ]
 
     screeFig = plt.figure()
-    plt.plot(l)
+    plt.plot(ll)
     plt.show()
 
     return screeFig
@@ -50,9 +50,10 @@ class Archetypes():
   def weights(self, k=0):
 
     if k > 0:
-      l  = heapq.nlargest(k, [ archetype[1] for archetype in self.archetypesList ])
-      ll = [ archetype[0] for archetype in self.archetypesList if archetype[1] >= l[-1]]
+      self.k = k
+      ll = [ archetype[0] for archetype in self.archetypesList[:k] ]
     else:
+      self.k = len(self.archetypesList)
       ll = [ archetype[0] for archetype in self.archetypesList ]
 
     self.H = self.X[ll,:]
@@ -65,7 +66,7 @@ class Archetypes():
       else:
         self.W[i,:], self.r[i] = opt.nnls(self.H.T,x.T)
 
-    return self.H, self.W
+    return self.W, self.H
 
 
 if __name__ == '__main__':
