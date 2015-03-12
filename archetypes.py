@@ -1,8 +1,10 @@
 import cvxopt as cvx
-import heapq
+from cvxopt import solvers as cvxsol
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import optimize as spopt
+
+cvxsol.options['show_progress'] = False
 
 
 class Archetypes():
@@ -36,7 +38,7 @@ class Archetypes():
   def findAllArchetypes(self, p=0.05, proj='Gaussian'):
 
     kk = 0
-    while len(self.findArchetypes(m = np.ceil(1.5/p), proj=sampling)) > kk:
+    while len(self.findArchetypes(m=np.ceil(1.5/p), proj=proj)) > kk:
       kk = len(self.archetypesList)
 
     return self.archetypesList
@@ -62,38 +64,45 @@ class Archetypes():
       ll = [ archetype[0] for archetype in self.archetypesList ]
 
     self.H = self.X[ll,:]
-    self.W = np.zeros((self.n, len(ll) ))
+    self.W = np.zeros((self.n, self.k ))
     self.r = np.zeros(self.n)
 
     for i, x in enumerate(self.X):
       if i not in ll:
         if loss.lower() == 'square':
-          self.W[i,:], self.r[i] = spopt.nnls(self.H.T,x.T)
+          self.W[i,:], self.r[i] = spopt.nnls(self.H.T, x.T)
 
         elif loss.upper() == 'KL':
-            raise NotImplementedError
+            
+            HH = cvx.matrix(self.H.T)
+            ek = cvx.matrix(1., (self.k,1))
+            ep = cvx.matrix(1., (self.p,1))
 
-            """
-            \nabla_H D(X||WH) = - W' * Y + W' * Z, where Y = X ./ (W * H), and z_{ij} = 1.
-            \nabla_W D(X||WH) = - Y * H' + Z * H'
-            """
+            def KL(ww=None, zz=None):
+              if ww is None:
+                return 0, cvx.matrix(1., (self.k,1))
 
-            def F(w=None, z=None):
-              if w is None:
-                return 0, matrix(1.0, (self.k,1))
-
-              if min(w) <= 0.0:
+              if cvx.min(ww) <= 0.:
                 return None
 
-              f  = -sum(log(x))
-              Df = -(x**-1).T
+              xx   = cvx.matrix(x.T)
+              HHww = HH * ww
 
-              if z is None:
-                return f, Df
+              kl   = sum(cvx.mul(xx, cvx.log(cvx.div(xx, HHww)) + HHww - xx ))
+              Dkl  = (ep.T - cvx.div(xx.T, HHww.T)) * HH
+
+              if zz is None:
+                return kl, Dkl
 
               else:
-                H = spdiag(z[0] * x**-2)
-                return f, Df, H
+                D2kl = HH.T * cvx.spdiag(cvx.div(zz[0] * xx, HHww**2)) * HH
+                return kl, Dkl, D2kl
+
+            II        = cvx.matrix(0., (self.k, self.k))
+            II[::self.k+1] = 1.  
+            
+            sol = cvxsol.cp(KL, G=-II, h=ek)
+            self.W[i,:] = np.array(sol['x']).squeeze()
 
         else:
           raise ValueError("loss unrecognized.")
